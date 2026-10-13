@@ -21,3 +21,29 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run check
+      - name: Verify without administrator or Developer Mode privileges
+        shell: pwsh
+        run: |
+          $developerMode = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
+          New-Item -Path $developerMode -Force | Out-Null
+          New-ItemProperty -Path $developerMode -Name AllowDevelopmentWithoutDevLicense -PropertyType DWord -Value 0 -Force | Out-Null
+          $name = 'PiIncognitoTest'
+          $password = ConvertTo-SecureString ([guid]::NewGuid().ToString() + 'aA!42') -AsPlainText -Force
+          New-LocalUser -Name $name -Password $password -PasswordNeverExpires | Out-Null
+          $credential = [PSCredential]::new(".\$name", $password)
+          $temporary = Join-Path $env:RUNNER_TEMP 'incognito-standard-user'
+          New-Item -ItemType Directory -Path $temporary | Out-Null
+          icacls $temporary /grant "${name}:(OI)(CI)F" | Out-Null
+          $root = (Get-Location).Path
+          $node = (Get-Command node).Source
+          $script = Join-Path $root 'test/windows-standard-user.ps1'
+          $output = Join-Path $env:RUNNER_TEMP 'incognito-standard-user.out'
+          $errorLog = Join-Path $env:RUNNER_TEMP 'incognito-standard-user.err'
+          try {
+            $process = Start-Process powershell.exe -Credential $credential -LoadUserProfile -Wait -PassThru -WorkingDirectory $root -RedirectStandardOutput $output -RedirectStandardError $errorLog -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $script, '-Node', $node, '-Root', $root, '-Temp', $temporary)
+            Get-Content $output
+            Get-Content $errorLog
+            if ($process.ExitCode -ne 0) { throw "Standard-user tests failed ($($process.ExitCode))." }
+          } finally {
+            Remove-LocalUser -Name $name
+          }
