@@ -16,6 +16,7 @@ public static class IncognitoDevice {
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
   static extern uint QueryDosDevice(string name, [Out] char[] target, int length);
   public static string[] Query(string name) {
+    if (String.IsNullOrEmpty(name)) name = null;
     var buffer = new char[65536];
     uint count = QueryDosDevice(name, buffer, buffer.Length);
     if (count == 0) {

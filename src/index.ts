@@ -114,8 +114,6 @@ export default function incognito(pi: ExtensionAPI): void {
 					},
 				});
 				if (result.cancelled) ctx.ui.notify("Incognito was not enabled: session switch cancelled.", "warning");
-			} catch (error) {
-				ctx.ui.notify(`Incognito toggle failed: ${String(error)}`, "error");
 			} finally {
 				allowSwitch = false;
 				busy = false;
