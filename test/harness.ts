@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { SessionManager, ModelRuntime, SettingsManager, createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices } from "@earendil-works/pi-coding-agent";
 import { createAssistantMessageEventStream, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import incognito from "../src/index.ts";
+import { sweep } from "../src/storage.ts";
+
+process.env.PI_OFFLINE = "1";
 
 export const PRIVATE = "PRIVATE_INCOGNITO_TEST_MARKER";
 
@@ -72,6 +75,7 @@ export async function harness(t: any, directory?: string) {
 	};
 	t.after(async () => {
 		await runtime.dispose();
+		sweep(dir, { ownDisposed: true });
 		for (const listener of process.listeners("exit")) {
 			if (!priorExitListeners.has(listener)) process.off("exit", listener);
 		}

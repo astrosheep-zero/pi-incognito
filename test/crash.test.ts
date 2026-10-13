@@ -42,7 +42,8 @@ for (const mode of ["normal", "SIGKILL"] as const) {
 				assert.equal(code, 0);
 				assert.deepEqual(readdirSync(dir).filter(n => lstatSync(join(dir, n)).isSymbolicLink()), []);
 			} else {
-				assert.equal(signal, "SIGKILL");
+				if (process.platform === "win32") assert.notEqual(code, 0); // TerminateProcess, not a POSIX signal.
+				else assert.equal(signal, "SIGKILL");
 			}
 			// The public file is never modified, in either case.
 			assert.equal(readFileSync(file, "utf8"), before);

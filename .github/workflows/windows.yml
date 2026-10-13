@@ -1,21 +1,24 @@
 name: Windows incognito
 on:
   push:
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  null-device-probe:
+  test:
     runs-on: windows-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    env:
+      PI_OFFLINE: "1"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 26
-      - name: Probe Windows null-device symlinks
-        run: node test/windows-null-probe.mjs
-      - name: Probe native NT reparse targets
-        run: ./test/windows-native-null-probe.ps1
-      - name: Probe DOS-device alias redirection
-        run: ./test/windows-dos-device-probe.ps1
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Type check
+        run: npx tsc --noEmit --strict --module NodeNext --target ES2023 --allowImportingTsExtensions --skipLibCheck --types node src/*.ts test/*.ts
+      - run: npm run check

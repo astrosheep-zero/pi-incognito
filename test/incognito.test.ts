@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync, readdirSync, lstatSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { harness, PRIVATE } from "./harness.ts";
-import { isPrivate } from "../src/storage.ts";
+import { initializePrivate, isPrivate, privatePath } from "../src/storage.ts";
 
 function scan(dir: string): string[] {
 	return readdirSync(dir).flatMap(name => {
@@ -92,9 +92,11 @@ test("next start sweeps links left by dead processes and keeps live ones", async
 	await h.runtime.session.prompt("public");
 	await h.command();
 	const live = h.runtime.session.sessionFile!;
-	const dead = live.replace(/incognito-\d+-/, "incognito-999999-");
-	(await import("node:fs")).symlinkSync("/dev/null", dead);
+	const dead = privatePath(join(h.dir, "public.jsonl")).replace(/incognito-\d+-/, "incognito-999999-");
+	if (process.platform === "win32") initializePrivate(dead, [{ public: true }], () => {});
+	else (await import("node:fs")).symlinkSync("/dev/null", dead);
+	assert.ok(isPrivate(dead));
 	await h.runtime.session.reload();
 	assert.ok(isPrivate(live));
-	assert.ok(!existsSync(dead) && !links(h.dir).includes(dead));
+	assert.ok(!isPrivate(dead));
 });

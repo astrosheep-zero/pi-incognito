@@ -1,7 +1,7 @@
 {
   "name": "@astrosheep/pi-incognito",
   "version": "0.1.0",
-  "description": "Discard a private segment of a Pi session using a /dev/null symlink.",
+  "description": "Private Pi session segments using native null-device redirection.",
   "type": "module",
   "files": [
     "src",
@@ -21,10 +21,11 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "1.1.0",
     "@earendil-works/pi-ai": "1.1.0",
-    "@types/node": "^26.5.1"
+    "@types/node": "^26.5.1",
+    "typescript": "^6.0.2"
   },
   "scripts": {
-    "test": "PI_OFFLINE=1 node --experimental-strip-types --test test/*.test.ts",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
     "check": "pi --no-extensions -e ./src/index.ts --list-models __load_check__"
   }
 }
