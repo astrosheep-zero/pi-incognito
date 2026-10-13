@@ -1,0 +1,30 @@
+{
+  "name": "@astrosheep/pi-incognito",
+  "version": "0.1.0",
+  "description": "Discard a private segment of a Pi session using a /dev/null symlink.",
+  "type": "module",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@types/node": "^26.5.1"
+  },
+  "scripts": {
+    "test": "PI_OFFLINE=1 node --experimental-strip-types --test test/*.test.ts",
+    "check": "pi --no-extensions -e ./src/index.ts --list-models __load_check__"
+  }
+}

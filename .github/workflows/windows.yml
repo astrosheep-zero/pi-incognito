@@ -1,0 +1,17 @@
+name: Windows incognito
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  null-device-probe:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Probe Windows null-device symlinks
+        run: node test/windows-null-probe.mjs
