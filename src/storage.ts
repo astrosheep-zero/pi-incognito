@@ -2,7 +2,6 @@ import { lstatSync, mkdtempSync, readdirSync, readlinkSync, renameSync, rmSync, 
 import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 // Unix: private null-device link. Windows: a logon-scoped DOS-device alias.
@@ -51,7 +50,7 @@ export function blackHole(file: string): void {
 }
 
 /** Load public history, then redirect the SAME path before any private input can run. */
-export function initializePrivate(target: string, entries: unknown[], load: (path: string) => void): void {
+export function initializePrivate(target: string, entries: unknown[], load: (path: string) => void, sessionDir: string): void {
 	if (process.platform !== "win32") {
 		writePublicCopy(target, entries);
 		load(target);
@@ -60,7 +59,7 @@ export function initializePrivate(target: string, entries: unknown[], load: (pat
 	}
 	const name = DEVICE_NAME.exec(target)?.[1];
 	if (!name) throw new Error("Invalid Windows incognito path.");
-	const directory = mkdtempSync(join(tmpdir(), "pi-incognito-public-"));
+	const directory = mkdtempSync(join(sessionDir, `.incognito-public-${process.pid}-`));
 	const copy = join(directory, "public.jsonl");
 	try {
 		writePublicCopy(copy, entries);
@@ -89,7 +88,6 @@ function alive(pid: number): boolean {
 export function sweep(dir: string, options: { keep?: string; ownDisposed?: boolean } = {}): void {
 	if (process.platform === "win32") {
 		device("sweep", ["-OwnerPid", String(options.ownDisposed ? process.pid : 0), "-Keep", DEVICE_NAME.exec(options.keep ?? "")?.[1] ?? "none"]);
-		return;
 	}
 	let names: string[];
 	try {
@@ -98,8 +96,16 @@ export function sweep(dir: string, options: { keep?: string; ownDisposed?: boole
 		return;
 	}
 	for (const name of names) {
-		const match = PRIVATE_NAME.exec(name);
 		const file = join(dir, name);
+		const staging = /^\.incognito-public-(\d+)-/.exec(name);
+		if (staging) {
+			const pid = Number(staging[1]);
+			if ((pid === process.pid ? options.ownDisposed : !alive(pid)) && lstatSync(file).isDirectory()) {
+				rmSync(file, { recursive: true, force: true });
+			}
+			continue;
+		}
+		const match = PRIVATE_NAME.exec(name);
 		if (!match || file === options.keep || !isPrivate(file)) continue;
 		const pid = Number(match[1]);
 		if (pid === process.pid ? options.ownDisposed : !alive(pid)) {

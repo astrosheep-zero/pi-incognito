@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync, readdirSync, lstatSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, lstatSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { harness, PRIVATE } from "./harness.ts";
 import { initializePrivate, isPrivate, privatePath } from "../src/storage.ts";
@@ -23,12 +23,15 @@ test("saved session: public file never touched; private writes vanish; guards; r
 	await h.command();
 	const sm = h.runtime.session.sessionManager;
 	assert.ok(isPrivate(sm.getSessionFile()));
+	assert.ok(!readdirSync(h.dir).some(name => name.startsWith(".incognito-public-")));
 	assert.notEqual(sm.getSessionFile(), file);
 	assert.equal(h.statuses.at(-1), "👻");
 	assert.match(h.notifications.at(-1)!, /Incognito on/);
 	assert.ok(JSON.stringify(sm.getEntries()).includes("public before"));
 	await h.runtime.session.prompt(PRIVATE);
 	sm.appendCustomEntry("private", { marker: PRIVATE });
+	const user = sm.getBranch().find(entry => entry.type === "message" && entry.message.role === "user")!;
+	sm.appendCompaction(PRIVATE, user.id, 100);
 	(sm as any)._rewriteFile();
 	assert.deepEqual(scan(h.dir), []);
 	assert.deepEqual(readFileSync(file), before);
@@ -93,10 +96,18 @@ test("next start sweeps links left by dead processes and keeps live ones", async
 	await h.command();
 	const live = h.runtime.session.sessionFile!;
 	const dead = privatePath(join(h.dir, "public.jsonl")).replace(/incognito-\d+-/, "incognito-999999-");
-	if (process.platform === "win32") initializePrivate(dead, [{ public: true }], () => {});
+	if (process.platform === "win32") initializePrivate(dead, [{ public: true }], () => {}, h.dir);
 	else (await import("node:fs")).symlinkSync("/dev/null", dead);
 	assert.ok(isPrivate(dead));
+	const staleCopy = join(h.dir, ".incognito-public-999999-orphan");
+	const liveCopy = join(h.dir, `.incognito-public-${process.pid}-live`);
+	for (const dir of [staleCopy, liveCopy]) {
+		mkdirSync(dir);
+		writeFileSync(join(dir, "public.jsonl"), "public only");
+	}
 	await h.runtime.session.reload();
 	assert.ok(isPrivate(live));
 	assert.ok(!isPrivate(dead));
+	assert.ok(!existsSync(staleCopy));
+	assert.ok(existsSync(liveCopy));
 });

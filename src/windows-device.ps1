@@ -50,8 +50,14 @@ if ($Action -eq 'map') {
     if ($device -notmatch $pattern -or $device -eq $Keep) { continue }
     $pidFromName = [int]$Matches[1]
     if ($pidFromName -eq $OwnerPid -or -not (Get-Process -Id $pidFromName -ErrorAction SilentlyContinue)) {
-      foreach ($target in [IncognitoDevice]::Query($device)) {
-        [IncognitoDevice]::Remove($device, $target)
+      try {
+        foreach ($target in [IncognitoDevice]::Query($device)) {
+          [IncognitoDevice]::Remove($device, $target)
+        }
+      } catch {
+        # An alias from another security context may not be removable. Do not let
+        # it prevent cleanup of the rest, and never elevate to remove it.
+        Write-Warning "Could not remove incognito device alias $device."
       }
     }
   }

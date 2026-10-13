@@ -1,4 +1,5 @@
 import { dirname } from "node:path";
+import { writeSync } from "node:fs";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { initializePrivate, isPrivate, privatePath, sweep } from "./storage.ts";
 
@@ -19,7 +20,10 @@ function sessionDirs(): Set<string> {
 		// Node's exit phase runs after Pi finishes every shutdown handler, so no manager can
 		// write again. Unlinking earlier would let a late append recreate a regular file.
 		process.once("exit", () => {
-			for (const dir of dirs) sweep(dir, { ownDisposed: true });
+			for (const dir of dirs) {
+				try { sweep(dir, { ownDisposed: true }); }
+				catch { writeSync(2, "Incognito cleanup could not finish. Saved sessions remain intact.\n"); }
+			}
 		});
 	}
 	return store[KEY];
@@ -42,8 +46,9 @@ export default function incognito(pi: ExtensionAPI): void {
 		const dir = ctx.sessionManager.getSessionDir();
 		if (dir) {
 			dirs.add(dir);
-			// Leftovers from crashed processes are empty links; the public file was never touched.
-			sweep(dir, { keep: ctx.sessionManager.getSessionFile() });
+			// Reclaim dead-process links/aliases and public-only bootstrap copies.
+			try { sweep(dir, { keep: ctx.sessionManager.getSessionFile() }); }
+			catch { ctx.ui.notify("Incognito cleanup is unavailable. Saved sessions remain intact.", "warning"); }
 		}
 		updateStatus(ctx);
 	});
@@ -95,7 +100,7 @@ export default function incognito(pi: ExtensionAPI): void {
 				const result = await ctx.newSession({
 					setup: async (manager) => {
 						try {
-							initializePrivate(target, entries, path => manager.setSessionFile(path));
+							initializePrivate(target, entries, path => manager.setSessionFile(path), dirname(file));
 							if (leaf) manager.branch(leaf);
 							else manager.resetLeaf();
 							manager.appendCustomEntry(STATE, { publicFile: file });
@@ -104,7 +109,7 @@ export default function incognito(pi: ExtensionAPI): void {
 							// regular-file shadow active while implying privacy is enabled.
 							manager.setSessionFile(file);
 							failure = String(error);
-							sweep(dirname(file), { ownDisposed: true });
+							try { sweep(dirname(file), { ownDisposed: true }); } catch { /* Leave harmless residue for a later cleanup. */ }
 						}
 					},
 					withSession: async (fresh) => {
