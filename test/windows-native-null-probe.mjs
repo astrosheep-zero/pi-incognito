@@ -3,7 +3,9 @@ import { join } from 'node:path';
 const dir = process.env.PI_RAW_NULL_DIR;
 const rows = [];
 for (const name of readdirSync(dir)) {
-  const file = join(dir, name), row = { name };
+  const root = join(dir, name);
+  const file = name.startsWith('junction-') ? join(root, 'private.jsonl') : root;
+  const row = { name, file };
   for (const [key, action] of Object.entries({
     readlink: () => readlinkSync(file),
     lstat: () => lstatSync(file).isSymbolicLink(),

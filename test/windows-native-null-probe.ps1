@@ -34,6 +34,24 @@ public static class NativeNullProbe {
         throw new Win32Exception(Marshal.GetLastWin32Error());
     }
   }
+  public static void Junction(string path, string target) {
+    Directory.CreateDirectory(path);
+    var bytes = Encoding.Unicode.GetBytes(target);
+    var buffer = new byte[16 + bytes.Length + 2];
+    U32(buffer, 0, 0xA0000003); // IO_REPARSE_TAG_MOUNT_POINT
+    U16(buffer, 4, (ushort)(buffer.Length - 8));
+    U16(buffer, 8, 0);
+    U16(buffer, 10, (ushort)bytes.Length);
+    U16(buffer, 12, (ushort)(bytes.Length + 2));
+    U16(buffer, 14, 0);
+    Buffer.BlockCopy(bytes, 0, buffer, 16, bytes.Length);
+    using (var handle = CreateFile(path, 0x40000000, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+      if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+      uint returned;
+      if (!DeviceIoControl(handle, 0x000900A4, buffer, buffer.Length, IntPtr.Zero, 0, out returned, IntPtr.Zero))
+        throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+  }
 }
 '@
 $dir = Join-Path $env:TEMP ("pi-native-null-" + [guid]::NewGuid())
@@ -44,6 +62,10 @@ try {
     $path = Join-Path $dir "$i.jsonl"
     try { [NativeNullProbe]::Link($path, $targets[$i]); Write-Host "Created $path -> $($targets[$i])" }
     catch { Write-Host "Create failed: $($_.Exception.Message)" }
+  }
+  for ($i = 0; $i -lt $targets.Count; $i++) {
+    try { [NativeNullProbe]::Junction((Join-Path $dir "junction-$i"), $targets[$i]); Write-Host "Junction -> $($targets[$i])" }
+    catch { Write-Host "Junction failed: $($_.Exception.Message)" }
   }
   $env:PI_RAW_NULL_DIR = $dir
   node test/windows-native-null-probe.mjs
