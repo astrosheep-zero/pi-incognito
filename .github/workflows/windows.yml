@@ -17,3 +17,5 @@ jobs:
         run: node test/windows-null-probe.mjs
       - name: Probe native NT reparse targets
         run: ./test/windows-native-null-probe.ps1
+      - name: Probe DOS-device alias redirection
+        run: ./test/windows-dos-device-probe.ps1
