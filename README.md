@@ -47,6 +47,8 @@ This is not a sandbox or forensic erasure:
 
 ## Development
 
+`src/index.ts` owns the shared command/lifecycle flow. `src/storage.ts` selects the backend once; `src/storage/common.ts` holds shared serialization, file checks, and cleanup rules. `src/storage/unix.ts` and `src/storage/windows.ts` contain only platform-specific storage behavior; the Windows helper lives beside its backend.
+
 ```sh
 npm install --ignore-scripts
 npm test
