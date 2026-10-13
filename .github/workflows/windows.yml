@@ -9,9 +9,11 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 26
       - name: Probe Windows null-device symlinks
         run: node test/windows-null-probe.mjs
+      - name: Probe native NT reparse targets
+        run: ./test/windows-native-null-probe.ps1
