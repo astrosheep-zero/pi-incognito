@@ -14,5 +14,5 @@ $env:TEMP = $Temp
 $env:TMP = $Temp
 $env:PI_OFFLINE = '1'
 Set-Location $Root
-& $Node --experimental-strip-types --test test/cli.test.ts test/incognito.test.ts test/crash.test.ts
+& $Node --experimental-strip-types --test --test-concurrency=1 test/cli.test.ts test/incognito.test.ts test/crash.test.ts
 exit $LASTEXITCODE
