@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "Private Pi session segments using native null-device redirection.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/astrosheep-zero/pi-incognito.git"
+  },
+  "homepage": "https://github.com/astrosheep-zero/pi-incognito#readme",
+  "bugs": {
+    "url": "https://github.com/astrosheep-zero/pi-incognito/issues"
+  },
   "files": [
     "src",
     "README.md"

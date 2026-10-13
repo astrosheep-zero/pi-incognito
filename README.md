@@ -3,8 +3,10 @@
 Private messages inside a Pi session. Protects the session JSONL only. Requires Pi 1.1.0 on macOS, Linux, or Windows.
 
 ```sh
-pi -e ./src/index.ts
+pi install npm:@astrosheep/pi-incognito@0.1.0
 ```
+
+For a local development checkout: `pi -e ./src/index.ts`.
 
 `/incognito` toggles the mode and reports the new status. It takes no arguments.
 
