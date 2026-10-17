@@ -21,7 +21,7 @@ test("real Pi CLI RPC smoke: blank toggle, reply, guards, saved toggle, shutdown
 	const dir = mkdtempSync(join(tmpdir(), "pi-incognito-cli-"));
 	const sessions = join(dir, "sessions");
 	const client = new RpcClient({
-		cliPath: fileURLToPath(new URL("./cli.js", import.meta.resolve("@earendil-works/pi-coding-agent"))),
+		cliPath: process.env.PI_INCOGNITO_TEST_CLI ?? fileURLToPath(new URL("./cli.js", import.meta.resolve("@earendil-works/pi-coding-agent"))),
 		cwd: dir,
 		env: { PI_CODING_AGENT_DIR: join(dir, "agent"), PI_OFFLINE: "1" },
 		provider: "incognito-smoke", model: "offline",
@@ -33,8 +33,13 @@ test("real Pi CLI RPC smoke: blank toggle, reply, guards, saved toggle, shutdown
 		await client.start();
 		const original = (await client.getState()).sessionFile!;
 		assert.ok(!existsSync(original));
+		await client.setModel("incognito-smoke", "offline-alt");
+		await client.setThinkingLevel("high");
 		await client.prompt("/incognito");
-		assert.ok(isPrivate((await client.getState()).sessionFile));
+		const privateState = await client.getState();
+		assert.ok(isPrivate(privateState.sessionFile));
+		assert.equal(privateState.model?.id, "offline-alt");
+		assert.equal(privateState.thinkingLevel, "high");
 		await client.promptAndWait(PRIVATE);
 		assert.match((await client.getLastAssistantText())!, /PRIVATE_CLI_SMOKE_MARKER/);
 		assert.deepEqual(await client.clone(), { cancelled: true });
@@ -45,13 +50,25 @@ test("real Pi CLI RPC smoke: blank toggle, reply, guards, saved toggle, shutdown
 		await client.prompt("/incognito");
 		assert.equal((await client.getState()).sessionFile, original);
 		assert.ok(!existsSync(original));
+		await client.setModel("incognito-smoke", "offline-alt");
+		await client.setThinkingLevel("high");
 		await client.promptAndWait("PUBLIC_CLI_MESSAGE");
+		const publicLeaf = (await client.getEntries()).leafId;
+		await client.promptAndWait("PUBLIC_BRANCH_TAIL");
+		await client.prompt(`/smoke-tree ${publicLeaf}`);
+		const publicMessages = await client.getMessages();
 		const before = readFileSync(original);
 		await client.prompt("/incognito");
+		assert.equal((await client.getState()).model?.id, "offline-alt");
+		assert.equal((await client.getState()).thinkingLevel, "high");
 		await client.promptAndWait(PRIVATE);
 		assert.deepEqual(readFileSync(original), before);
 		await client.prompt("/incognito");
 		assert.deepEqual(readFileSync(original), before);
+		assert.equal((await client.getState()).model?.id, "offline-alt");
+		assert.equal((await client.getState()).thinkingLevel, "high");
+		assert.equal((await client.getEntries()).leafId, publicLeaf);
+		assert.deepEqual(await client.getMessages(), publicMessages);
 		assert.ok(!JSON.stringify(await client.getEntries()).includes(PRIVATE));
 		// RpcClient.stop uses process termination. A new CLI startup cleans the
 		// abandoned alias/link, without altering the discoverable public file.

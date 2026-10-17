@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionManager, ModelRuntime, SettingsManager, createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices } from "@earendil-works/pi-coding-agent";
+import { SessionManager, ModelRuntime, SettingsManager, createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createAssistantMessageEventStream, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import incognito from "../src/index.ts";
 import { sweep } from "../src/storage.ts";
@@ -10,10 +10,13 @@ process.env.PI_OFFLINE = "1";
 
 export const PRIVATE = "PRIVATE_INCOGNITO_TEST_MARKER";
 
-export async function harness(t: any, directory?: string) {
+export async function harness(t: any, directory?: string, extraExtension?: (pi: ExtensionAPI) => void) {
 	const dir = directory ?? mkdtempSync(join(tmpdir(), "pi-incognito-test-"));
 	const priorExitListeners = new Set(process.listeners("exit"));
-	const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } });
+	const settingsManager = SettingsManager.inMemory({
+		defaultProvider: "anthropic", defaultModel: "claude-sonnet-4-5", defaultThinkingLevel: "medium",
+		compaction: { enabled: false }, retry: { enabled: false },
+	});
 	const modelRuntime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: join(dir, "models.json"), modelsStorePath: join(dir, "models-store.json") });
 	const model = modelRuntime.getModel("anthropic", "claude-sonnet-4-5")!;
 	await modelRuntime.setRuntimeApiKey(model.provider, "dummy-offline-test-key");
@@ -30,15 +33,15 @@ export async function harness(t: any, directory?: string) {
 					pi.on("session_shutdown", (_event, ctx) => {
 						if (JSON.stringify(ctx.sessionManager.getEntries()).includes(PRIVATE)) pi.appendEntry("late-shutdown", { marker: PRIVATE });
 					});
-				}],
+				}, ...(extraExtension ? [extraExtension] : [])],
 			},
 		});
-		const result = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model, tools: [] });
+		const result = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent });
 		// Only inference is synthetic; actual agent, persistence, extension and replacement pipelines run.
-		result.session.agent.streamFunction = async () => {
+		result.session.agent.streamFunction = async (selectedModel) => {
 			const stream = createAssistantMessageEventStream();
 			stream.push({ type: "done", reason: "stop", message: {
-				role: "assistant", content: [{ type: "text", text: "reply" }], api: model.api, provider: model.provider, model: model.id,
+				role: "assistant", content: [{ type: "text", text: "reply" }], api: selectedModel.api, provider: selectedModel.provider, model: selectedModel.id,
 				usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
 				stopReason: "stop", timestamp: Date.now(),
 			} });
@@ -82,7 +85,7 @@ export async function harness(t: any, directory?: string) {
 		rmSync(dir, { recursive: true, force: true });
 	});
 	return {
-		dir, get runtime() { return runtime; }, errors, notifications, statuses, command,
+		dir, modelRuntime, get runtime() { return runtime; }, errors, notifications, statuses, command,
 		setCancel: (value: typeof cancel) => { cancel = value; },
 		reopen: async (file: string) => {
 			runtime = await createAgentSessionRuntime(factory, { cwd: dir, agentDir: dir, sessionManager: SessionManager.open(file) });

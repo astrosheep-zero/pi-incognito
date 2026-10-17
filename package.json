@@ -1,6 +1,6 @@
 {
   "name": "@astrosheep/pi-incognito",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Private Pi session segments using native null-device redirection.",
   "type": "module",
   "repository": {

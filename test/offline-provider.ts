@@ -7,11 +7,11 @@ export default function offlineProvider(pi: ExtensionAPI): void {
 		api: "incognito-smoke",
 		baseUrl: "https://unused.invalid",
 		apiKey: "offline-test-key",
-		models: [{
-			id: "offline", name: "Offline smoke test", reasoning: false, input: ["text"],
+		models: ["offline", "offline-alt"].map(id => ({
+			id, name: `Offline smoke test (${id})`, reasoning: true, input: ["text" as const],
 			contextWindow: 64000, maxTokens: 1024,
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-		}],
+		})),
 		streamSimple(model, context) {
 			const stream = createAssistantMessageEventStream();
 			const latest = context.messages.findLast(message => message.role === "user");
@@ -31,6 +31,10 @@ export default function offlineProvider(pi: ExtensionAPI): void {
 			stream.end();
 			return stream;
 		},
+	});
+	pi.registerCommand("smoke-tree", {
+		description: "Test-only public tree navigation",
+		handler: async (id, ctx) => { await ctx.navigateTree(id); },
 	});
 	pi.on("session_shutdown", (_event, ctx) => {
 		if (JSON.stringify(ctx.sessionManager.getEntries()).includes("PRIVATE_CLI_SMOKE_MARKER")) {

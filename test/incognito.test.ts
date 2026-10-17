@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync, readdirSync, lstatSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createReadTool } from "@earendil-works/pi-coding-agent";
 import { harness, PRIVATE } from "./harness.ts";
 import { initializePrivate, isPrivate, privatePath } from "../src/storage.ts";
 
@@ -74,6 +75,108 @@ test("blank session: first prompt can be private; off leaves no files at all", a
 	assert.deepEqual(h.errors, []);
 });
 
+test("opening incognito preserves the selected model, thinking level and tool loadout", async t => {
+	for (const saved of [false, true]) {
+		await t.test(saved ? "saved session" : "blank session", async t => {
+			const h = await harness(t);
+			const model = h.modelRuntime.getModel("anthropic", "claude-opus-4-5")!;
+			await h.runtime.session.setModel(model);
+			h.runtime.session.setThinkingLevel("high");
+			h.runtime.session.setActiveToolsByName(["read"]);
+			if (saved) await h.runtime.session.prompt("public before");
+			const file = h.runtime.session.sessionFile!;
+			const before = existsSync(file) ? readFileSync(file) : undefined;
+
+			await h.command();
+			assert.ok(isPrivate(h.runtime.session.sessionFile));
+			assert.equal(h.runtime.session.model?.id, model.id);
+			assert.equal(h.runtime.session.thinkingLevel, "high");
+			assert.deepEqual(h.runtime.session.getActiveToolNames(), ["read"]);
+			await h.runtime.session.prompt(PRIVATE);
+			assert.equal(h.runtime.session.messages.at(-1)?.role, "assistant");
+			assert.equal((h.runtime.session.messages.at(-1) as any).model, model.id);
+
+			// A reload must not reapply the selection captured when incognito began.
+			await h.runtime.session.setModel(h.modelRuntime.getModel("anthropic", "claude-sonnet-4-5")!);
+			h.runtime.session.setThinkingLevel("low");
+			h.runtime.session.setActiveToolsByName(["bash"]);
+			await h.runtime.session.reload();
+			assert.equal(h.runtime.session.model?.id, "claude-sonnet-4-5");
+			assert.equal(h.runtime.session.thinkingLevel, "low");
+			assert.deepEqual(h.runtime.session.getActiveToolNames(), ["bash"]);
+			await h.command();
+			assert.equal(h.runtime.session.sessionFile, file);
+			if (saved) {
+				assert.equal(h.runtime.session.model?.id, model.id);
+				assert.equal(h.runtime.session.thinkingLevel, "high");
+			}
+			assert.deepEqual(h.runtime.session.getActiveToolNames(), ["read"]);
+			if (before) assert.deepEqual(readFileSync(file), before);
+			else assert.ok(!existsSync(file));
+			assert.deepEqual(scan(h.dir), []);
+			assert.deepEqual(h.errors, []);
+		});
+	}
+});
+
+test("tools registered by later session_start handlers keep their selected loadout", async t => {
+	const h = await harness(t, undefined, pi => {
+		pi.on("session_start", (_event, ctx) => {
+			pi.registerTool({ ...createReadTool(ctx.cwd), name: "late-read", exposure: "deferred" });
+		});
+	});
+	await h.runtime.session.prompt("public");
+	// Deliberately newer than the tool declaration saved in the transcript.
+	h.runtime.session.setActiveToolsByName(["late-read"]);
+	await h.command();
+	assert.deepEqual(h.runtime.session.getActiveToolNames(), ["late-read"]);
+	await h.command();
+	assert.deepEqual(h.runtime.session.getActiveToolNames(), ["late-read"]);
+	assert.deepEqual(h.errors, []);
+});
+
+test("closing incognito restores the exact public branch without rewriting the file", async t => {
+	const h = await harness(t);
+	await h.runtime.session.prompt("public A");
+	const assistant = h.runtime.session.sessionManager.getLeafId()!;
+	await h.runtime.session.prompt("public B");
+	const manager = h.runtime.session.sessionManager;
+	const user = manager.getBranch().find(entry => entry.type === "message" && entry.message.role === "user")!.id;
+	const file = manager.getSessionFile()!;
+	const before = readFileSync(file);
+	// User/custom-message navigation normally selects the parent; null is before every root.
+	for (const leaf of [assistant, user, null]) {
+		const current = h.runtime.session.sessionManager;
+		if (leaf) current.branch(leaf);
+		else current.resetLeaf();
+		h.runtime.session.refreshContext();
+		const messages = structuredClone(h.runtime.session.messages);
+		await h.command();
+		await h.runtime.session.prompt(PRIVATE);
+		await h.runtime.session.reload();
+		await h.command();
+		assert.equal(h.runtime.session.sessionFile, file);
+		assert.equal(h.runtime.session.sessionManager.getLeafId(), leaf);
+		assert.deepEqual(h.runtime.session.messages, messages);
+		assert.deepEqual(readFileSync(file), before);
+		assert.deepEqual(h.runtime.session.sessionManager.getEntries(), manager.getEntries());
+		assert.deepEqual(links(h.dir), []);
+	}
+	assert.deepEqual(h.errors, []);
+});
+
+test("queued messages prevent a toggle instead of being silently discarded", async t => {
+	const h = await harness(t);
+	const file = h.runtime.session.sessionFile;
+	await h.runtime.session.followUp("queued public message");
+	assert.ok(h.runtime.session.isIdle);
+	assert.equal(h.runtime.session.pendingMessageCount, 1);
+	await h.command();
+	assert.equal(h.runtime.session.sessionFile, file);
+	assert.equal(h.runtime.session.pendingMessageCount, 1);
+	assert.match(h.notifications.at(-1)!, /queued/i);
+});
+
 test("cancelled toggles never pretend to succeed", async t => {
 	const h = await harness(t);
 	await h.runtime.session.prompt("public");
@@ -83,7 +186,7 @@ test("cancelled toggles never pretend to succeed", async t => {
 	assert.equal(h.runtime.session.sessionFile, file);
 	h.setCancel(undefined);
 	await h.command();
-	h.setCancel("resume");
+	h.setCancel("new");
 	await h.command();
 	assert.ok(isPrivate(h.runtime.session.sessionFile));
 	assert.match(h.notifications.at(-1)!, /remains on/);

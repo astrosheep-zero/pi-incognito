@@ -3,7 +3,7 @@
 Private messages inside a Pi session. Protects the session JSONL only. Requires Pi 1.1.0 on macOS, Linux, or Windows.
 
 ```sh
-pi install npm:@astrosheep/pi-incognito@0.1.0
+pi install npm:@astrosheep/pi-incognito@0.1.1
 ```
 
 For a local development checkout: `pi -e ./src/index.ts`.
@@ -13,7 +13,7 @@ For a local development checkout: `pi -e ./src/index.ts`.
 - On: 👻 appears in the status bar, and new messages are not saved.
 - Off: the ghost disappears, private messages are discarded, and you are back in the saved session.
 
-Toggle while the agent is idle. Works in a blank session too, so the first message can be private.
+Toggle while the agent is idle with no queued messages. Works in a blank session too, so the first message can be private. Turning it on preserves the selected model, thinking level, and currently registered active tools.
 
 ## How it works
 
@@ -26,7 +26,9 @@ Windows aliases belong to the defining logon context; they are not a way to tran
 
 Windows needs Windows PowerShell and permission to run the helper's `Add-Type`; restrictive enterprise policies may prevent enabling incognito. A failed initialization reports an error and keeps the session public—it never reports incognito on while using a regular shadow file.
 
-Turning it off resumes the original file in a fresh runtime. The private session's in-memory history is dropped; its link/device alias is removed only after the old runtime finishes shutting down. Late session writes from extension shutdown handlers still go to the null device.
+Turning it off restores the saved session's pre-incognito model, thinking level, active tools, and exact branch position. Restoration runs against a temporary null-backed copy of public history before reopening the original file, so even model-selection metadata never changes the original JSONL. It uses Pi's public session APIs only.
+
+The private session's in-memory history is dropped; its link/device alias is removed only after the old runtime finishes shutting down. Late session writes from extension shutdown handlers still go to the null device.
 
 While on, `/fork`, `/clone`, `/new`, `/resume`, and import are blocked. Toggle off first. `/reload` keeps the mode.
 
